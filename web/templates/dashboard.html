@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>洗衣机管理系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto p-4">
+        <!-- 顶部导航 -->
+        <nav class="bg-white shadow-lg rounded-lg mb-6 p-4">
+            <div class="flex items-center space-x-4">
+                <span class="text-gray-700">当前用户: {{ session['user'] }}</span>
+                <a href="/logout" class="text-red-600 hover:text-red-800">登出</a>
+            </div>
+            <div class="flex justify-between items-center">
+                <div class="flex items-center space-x-4">
+                    <span class="text-lg font-bold">洗衣机管理系统</span>
+                    <span class="text-gray-600" id="runningTime">运行时间: 00:00</span>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <span>{{ current_user.username }}</span>
+                    <select class="border rounded p-2" id="roomSelect">
+                        <option value="0">洗衣房 1</option>
+                        <option value="1">洗衣房 2</option>
+                        <option value="2">洗衣房 3</option>
+                    </select>
+                    <a href="{{ url_for('logout') }}" 
+                       class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">
+                        登出
+                    </a>
+                </div>
+            </div>
+        </nav>
+
+        <!-- 洗衣机网格 -->
+        <div class="grid grid-cols-4 gap-4" id="machineGrid">
+            <!-- 洗衣机将通过JavaScript动态加载 -->
+        </div>
+
+        <!-- 操作提示框 -->
+        <div id="alertBox" class="fixed top-4 right-4 max-w-sm bg-white rounded-lg shadow-lg p-4 hidden">
+            <div id="alertMessage" class="text-gray-700"></div>
+        </div>
+
+        <!-- 洗衣机控制面板模态框 -->
+        <div id="machineModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full">
+            <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+                <div class="mt-3 text-center">
+                    <h3 class="text-lg leading-6 font-medium text-gray-900" id="modalTitle">洗衣机控制面板</h3>
+                    <div class="mt-2 px-7 py-3">
+                        <div class="text-sm text-gray-500" id="modalStatus"></div>
+                        <div class="text-lg font-bold mt-2" id="modalTimer"></div>
+                        <div class="text-sm text-gray-500 mt-2" id="modalReservations"></div>
+                    </div>
+                    <div class="items-center px-4 py-3">
+                        <button id="startButton" class="px-4 py-2 bg-blue-500 text-white text-base font-medium rounded-md shadow-sm hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-300">
+                            开始使用
+                        </button>
+                        <button id="reportButton" class="px-4 py-2 bg-yellow-500 text-white text-base font-medium rounded-md shadow-sm hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-300">
+                            举报
+                        </button>
+                        <button id="reserveButton" class="px-4 py-2 bg-green-500 text-white text-base font-medium rounded-md shadow-sm hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-300">
+                            预约
+                        </button>
+                        <button id="cancelReserveButton" class="px-4 py-2 bg-red-500 text-white text-base font-medium rounded-md shadow-sm hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-300 hidden">
+                            取消预约
+                        </button>
+                        <button id="closeButton" class="mt-3 px-4 py-2 bg-gray-500 text-white text-base font-medium rounded-md shadow-sm hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-300">
+                            关闭
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        // 状态颜色映射
+        const stateColors = {
+            0: 'bg-green-500',  // 可用
+            1: 'bg-red-500',    // 占用
+            2: 'bg-yellow-500', // 举报
+            3: 'bg-gray-500'    // 故障
+        };
+
+        // 状态文本映射
+        const stateTexts = {
+            0: '可用',
+            1: '使用中',
+            2: '已举报',
+            3: '故障'
+        };
+
+        // 举报类型映射
+        const reportTypes = {
+            1: '违规使用',
+            2: '设备故障'
+        };
+
+        let currentMachine = null;
+        let modalUpdateTimer = null;
+
+        // 检查用户是否已有预约
+        async function checkUserHasReservation() {
+            try {
+                const response = await fetch('/api/rooms');
+                if (!response.ok) {
+                    throw new Error('检查预约状态失败');
+                }
+                const rooms = await response.json();
+                for (const roomId in rooms) {
+                    for (const machine of rooms[roomId]) {
+                        if (machine.is_reserved_by_current_user) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            } catch (error) {
+                console.error('检查预约状态时出错:', error);
+                return false;
+            }
+        }
+
+        // 格式化时间显示
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        // 显示提示信息
+        function showAlert(message, isError = false) {
+            const alertBox = document.getElementById('alertBox');
+            const alertMessage = document.getElementById('alertMessage');
+            alertMessage.textContent = message;
+            alertBox.classList.remove('hidden', 'bg-red-100', 'bg-green-100');
+            alertBox.classList.add(isError ? 'bg-red-100' : 'bg-green-100');
+            setTimeout(() => {
+                alertBox.classList.add('hidden');
+            }, 3000);
+        }
+
+        // 更新洗衣机状态
+        async function updateMachines() {
+            try {
+                const response = await fetch('/api/rooms');
+                if (!response.ok) {
+                    throw new Error('获取洗衣机状态失败');
+                }
+                
+                const rooms = await response.json();
+                const currentRoom = rooms[document.getElementById('roomSelect').value];
+
+                if (!currentRoom) {
+                    throw new Error('无法获取当前房间数据');
+                }
+
+                // 如果当前有选中的机器，更新其状态
+                if (currentMachine) {
+                    const updatedMachine = currentRoom.find(m => m.id === currentMachine.id);
+                    if (updatedMachine) {
+                        currentMachine = updatedMachine;
+                    }
+                }
+
+                document.getElementById('machineGrid').innerHTML = currentRoom.map(machine => {
+                    let timeDisplay = '';
+                    if (machine.state === 1 && machine.time > 0) {
+                        timeDisplay = `<br><span class="machine-timer" data-machine-id="${machine.id}">${formatTime(machine.time)}</span>`;
+                    }
+
+                    let reservationDisplay = '';
+                    if (machine.reservation_count > 0) {
+                        reservationDisplay = `<br><span class="text-sm">预约: ${machine.reservation_count}人</span>`;
+                    }
+
+                    const isClickable = machine.state !== 3;
+                    const cursorClass = isClickable ? 'cursor-pointer' : 'cursor-not-allowed opacity-50';
+
+                    return `
+                    <div class="relative p-4 rounded-lg shadow-md bg-white ${cursorClass} hover:shadow-lg transition-shadow"
+                         ${isClickable ? `onclick="handleMachineClick(${machine.id}, ${machine.state})"` : ''}>
+                        <div class="text-center">
+                            <div class="mb-2">洗衣机 #${machine.id}</div>
+                            <div class="${stateColors[machine.state]} text-white p-2 rounded">
+                                ${stateTexts[machine.state]}${timeDisplay}${reservationDisplay}
+                            </div>
+                        </div>
+                    </div>
+                    `;
+                }).join('');
+
+            } catch (error) {
+                console.error('更新洗衣机状态时出错:', error);
+                // 不要在这里重置 currentMachine
+            }
+        }
+
+        // 处理洗衣机点击事件
+        async function handleMachineClick(machineId, state) {
+            if (state === 3) return; // 故障机器不响应点击
+
+            try {
+                const response = await fetch('/api/rooms');
+                if (!response.ok) {
+                    throw new Error('获取洗衣机信息失败');
+                }
+                const rooms = await response.json();
+                const room = rooms[document.getElementById('roomSelect').value];
+                
+                if (!room) {
+                    throw new Error('无法获取当前房间数据');
+                }
+
+                const machine = room.find(m => m.id === machineId);
+                
+                if (!machine) {
+                    throw new Error('无法获取洗衣机信息');
+                }
+
+                // 更新当前机器引用
+                currentMachine = machine;
+
+                const modal = document.getElementById('machineModal');
+                if (!modal) {
+                    throw new Error('模态框未找到');
+                }
+
+                const modalElements = {
+                    title: document.getElementById('modalTitle'),
+                    status: document.getElementById('modalStatus'),
+                    timer: document.getElementById('modalTimer'),
+                    reservations: document.getElementById('modalReservations'),
+                    startButton: document.getElementById('startButton'),
+                    reportButton: document.getElementById('reportButton'),
+                    reserveButton: document.getElementById('reserveButton'),
+                    cancelReserveButton: document.getElementById('cancelReserveButton')
+                };
+
+                // 检查所有必需的模态框元素是否存在
+                for (const [key, element] of Object.entries(modalElements)) {
+                    if (!element) {
+                        throw new Error(`模态框元素 ${key} 未找到`);
+                    }
+                }
+
+                modalElements.title.textContent = `洗衣机 #${machineId}`;
+                modalElements.status.textContent = `状态: ${stateTexts[state]}`;
+                
+                if (currentMachine.reservation_count > 0) {
+                    modalElements.reservations.textContent = `当前预约人数: ${currentMachine.reservation_count}`;
+                } else {
+                    modalElements.reservations.textContent = '';
+                }
+
+                modalElements.startButton.style.display = state === 3 ? 'none' : 'inline-block';
+                modalElements.reportButton.style.display = 'inline-block';
+                
+                const hasOtherReservation = await checkUserHasReservation();
+                
+                if (currentMachine.is_reserved_by_current_user) {
+                    modalElements.reserveButton.style.display = 'none';
+                    modalElements.cancelReserveButton.style.display = 'inline-block';
+                } else {
+                    modalElements.reserveButton.style.display = hasOtherReservation ? 'none' : 'inline-block';
+                    modalElements.cancelReserveButton.style.display = 'none';
+                }
+
+                if (state === 1 && currentMachine.time > 0) {
+                    modalElements.timer.textContent = `剩余时间: ${formatTime(currentMachine.time)}`;
+                    if (modalUpdateTimer) clearInterval(modalUpdateTimer);
+                    modalUpdateTimer = setInterval(() => {
+                        if (currentMachine && currentMachine.time > 0) {
+                            currentMachine.time--;
+                            modalElements.timer.textContent = `剩余时间: ${formatTime(currentMachine.time)}`;
+                        } else {
+                            clearInterval(modalUpdateTimer);
+                            modalElements.timer.textContent = '已完成';
+                        }
+                    }, 1000);
+                } else {
+                    modalElements.timer.textContent = '';
+                }
+
+                modal.classList.remove('hidden');
+            } catch (error) {
+                console.error('获取洗衣机信息时出错:', error);
+                showAlert(error.message || '获取信息失败，请重试', true);
+                currentMachine = null;
+            }
+        }
+
+        // 启动洗衣机
+        async function startMachine() {
+            if (!currentMachine) return;
+            
+            try {
+                const response = await fetch(`/api/machine/${currentMachine.id}/start`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    showAlert('启动成功');
+                    currentMachine.time = 120;  // 2分钟
+                    handleMachineClick(currentMachine.id, 1);
+                    updateMachines();
+                } else {
+                    showAlert(result.message, true);
+                }
+            } catch (error) {
+                console.error('启动洗衣机时出错:', error);
+                showAlert('启动失败，请重试', true);
+            }
+        }
+
+        // 举报洗衣机
+        async function reportMachine() {
+            if (!currentMachine) return;
+            
+            // 先移除可能存在的旧对话框
+            closeReportDialog();
+            
+            // 创建举报类型选择对话框
+            const reportDialog = document.createElement('div');
+            reportDialog.id = 'reportDialog';  // 添加ID便于查找
+            reportDialog.className = 'fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50';  // 添加z-50确保在最上层
+            reportDialog.innerHTML = `
+                <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+                    <h3 class="text-lg font-medium leading-6 text-gray-900 mb-4">选择举报类型</h3>
+                    <div class="space-y-4">
+                        <button onclick="submitReport(1)" class="w-full px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600">
+                            违规使用
+                        </button>
+                        <button onclick="submitReport(2)" class="w-full px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600">
+                            设备故障
+                        </button>
+                        <button onclick="closeReportDialog()" class="w-full px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">
+                            取消
+                        </button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(reportDialog);
+        }
+
+        // 提交举报
+        async function submitReport(type) {
+            if (!currentMachine) return;
+            
+            try {
+                const machineId = currentMachine.id;  // 保存机器ID
+                
+                // 先关闭所有对话框
+                closeReportDialog();
+                document.getElementById('machineModal').classList.add('hidden');
+                
+                const response = await fetch(`/api/machine/${machineId}/report`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ type: type })
+                });
+
+                const result = await response.json();
+                
+                if (!result.success) {
+                    throw new Error(result.message || '举报失败');
+                }
+                
+                // 等待后端状态更新
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // 重置当前机器引用
+                currentMachine = null;
+                
+                // 更新机器状态
+                await updateMachines();
+                
+                // 显示成功消息
+                showAlert(`举报成功: ${reportTypes[type]}`);
+                
+            } catch (error) {
+                console.error('举报洗衣机时出错:', error);
+                showAlert(error.message || '举报失败，请重试', true);
+                // 不要重置 currentMachine，这样用户可以重试
+                await updateMachines();
+            }
+        }
+
+        // 关闭举报对话框
+        function closeReportDialog() {
+            const dialog = document.getElementById('reportDialog');
+            if (dialog) {
+                dialog.remove();
+            }
+        }
+
+        // 预约洗衣机
+        async function reserveMachine() {
+            if (!currentMachine) return;
+            
+            try {
+                const response = await fetch(`/api/machine/${currentMachine.id}/reserve`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const result = await response.json();
+                if (result.success) {
+                    showAlert('预约成功');
+                    handleMachineClick(currentMachine.id, currentMachine.state);
+                    updateMachines();
+                } else {
+                    showAlert(result.message, true);
+                }
+            } catch (error) {
+                console.error('预约洗衣机时出错:', error);
+                showAlert('预约失败，请重试', true);
+            }
+        }
+
+        // 取消预约
+        async function cancelReserveMachine() {
+            if (!currentMachine) return;
+            
+            try {
+                const response = await fetch(`/api/machine/${currentMachine.id}/cancel_reserve`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const result = await response.json();
+                if (result.success) {
+                    showAlert('取消预约成功');
+                    handleMachineClick(currentMachine.id, currentMachine.state);
+                    updateMachines();
+                } else {
+                    showAlert(result.message, true);
+                }
+            } catch (error) {
+                console.error('取消预约时出错:', error);
+                showAlert('取消预约失败，请重试', true);
+            }
+        }
+
+        // 更新运行时间
+        let seconds = 0;
+        setInterval(() => {
+            seconds++;
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            document.getElementById('runningTime').textContent = 
+                `运行时间: ${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }, 1000);
+
+        // 绑定按钮事件
+        document.getElementById('startButton').onclick = startMachine;
+        document.getElementById('reportButton').onclick = reportMachine;
+        document.getElementById('reserveButton').onclick = reserveMachine;
+        document.getElementById('cancelReserveButton').onclick = cancelReserveMachine;
+        document.getElementById('closeButton').onclick = () => {
+            document.getElementById('machineModal').classList.add('hidden');
+            if (modalUpdateTimer) {
+                clearInterval(modalUpdateTimer);
+            }
+        };
+
+        // 监听洗衣房选择变化
+        document.getElementById('roomSelect').addEventListener('change', updateMachines);
+
+        // 初始化和定时更新
+        updateMachines();
+        setInterval(updateMachines, 1000);
+    </script>
+</body>
+</html>

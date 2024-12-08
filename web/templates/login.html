@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>登录 - 洗衣机管理系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body class="bg-gray-100">
+    <div class="min-h-screen flex items-center justify-center">
+        <div class="bg-white p-8 rounded-lg shadow-md w-96">
+            <h2 class="text-2xl font-bold mb-6 text-center">洗衣机管理系统</h2>
+            
+            <!-- 登录表单 -->
+            <form method="POST" action="{{ url_for('login') }}" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">账号</label>
+                    <input type="text" 
+                           name="username" 
+                           required
+                           class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">密码</label>
+                    <input type="password" 
+                           name="password" 
+                           required
+                           class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border">
+                </div>
+                <button type="submit" 
+                        class="w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                    登录
+                </button>
+            </form>
+
+            <!-- 错误消息显示 -->
+            {% with messages = get_flashed_messages() %}
+                {% if messages %}
+                    <div class="mt-4">
+                        {% for message in messages %}
+                            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative">
+                                {{ message }}
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+
+            <!-- 测试账号信息 -->
+            <div class="mt-6 text-sm text-gray-600">
+                <p class="font-bold mb-2">测试账号：</p>
+                <ul class="list-disc list-inside space-y-1">
+                    <li>admin / admin123</li>
+                    <li>test / test123</li>
+                    <li>user / user123</li>
+                </ul>
+            </div>
+
+            <!-- 版权信息 -->
+            <div class="mt-8 text-center text-gray-500 text-xs">
+                &copy; 2024 洗衣机管理系统. All rights reserved.
+            </div>
+        </div>
+    </div>
+</body>
+</html>
