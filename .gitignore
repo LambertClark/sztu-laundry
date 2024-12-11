@@ -40,3 +40,8 @@ ENV/
 
 # Local development settings
 .env
+
+# Ensure not to ignore resource files
+!desktop/resources/
+!desktop/resources/images/
+!desktop/resources/images/*.png

@@ -3,10 +3,13 @@ from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from .main_window import MainWindow
 from models.user import User
+import os
 
-class LoginWindow(QWidget):
+class LoginWindow(QDialog):
     def __init__(self):
         super().__init__()
+        # 获取项目根目录路径
+        self.root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         self.init_ui()
         
     def init_ui(self):
@@ -20,12 +23,11 @@ class LoginWindow(QWidget):
         main_layout.setContentsMargins(0, 60, 0, 60)  # 调整上下边距
         
         # Logo
+        logo_path = os.path.join(self.root_dir, 'desktop', 'resources', 'images', 'logo.png')
+        logo = QPixmap(logo_path)
         logo_label = QLabel()
-        logo_pixmap = QPixmap("desktop/resources/images/logo.png")
-        if not logo_pixmap.isNull():
-            logo_pixmap = logo_pixmap.scaled(120, 120, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            logo_label.setPixmap(logo_pixmap)
-            logo_label.setAlignment(Qt.AlignCenter)
+        logo_label.setPixmap(logo)
+        logo_label.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(logo_label)
         
         # 标题
