@@ -21,7 +21,7 @@ class MainWindow(QMainWindow):
         
     def init_ui(self):
         self.setWindowTitle('洗衣机管理系统')
-        self.setMinimumSize(800, 600)
+        self.setFixedSize(1024, 768)  # 改为固定大小，与登录窗口一致
         
         # 创建中心部件
         central_widget = QWidget()
@@ -68,22 +68,21 @@ class MainWindow(QMainWindow):
         seconds = self.elapsed_time % 60
         self.time_counter.setText(f"运行时间: {minutes:02d}:{seconds:02d}")
         
+        # 更新所有洗衣房的所有洗衣机的时间
+        for room in self.rooms:
+            for machine in room.machines:
+                machine.update_timer()  # 使用 Machine 类的 update_timer 方法
+        
+        # 只更新当前显示的洗衣房的界面
         current_room_id = self.room_combo.currentIndex()
-        room = self.rooms[current_room_id]
-        
-        # 更新所有洗衣机的时间
-        for machine in room.machines:
-            if machine.time > 0:
-                machine.time -= 1
-                if machine.time == 0:
-                    machine.state = MachineState.AVAILABLE
-        
-        # 更新显示
         for i in range(self.machine_grid.count()):
             widget = self.machine_grid.itemAt(i).widget()
             if widget:
-                machine = room.machines[i]
-                widget.time_label.setText(self.format_time(machine.time))
+                machine = self.rooms[current_room_id].machines[i]
+                # 只有非故障状态的机器才更新时间显示
+                if machine.state != MachineState.BROKEN and hasattr(widget, 'time_label'):
+                    widget.time_label.setText(self.format_time(machine.time))
+                # 更新状态指示器
                 status_indicator = widget.findChild(QLabel, "status_indicator")
                 if status_indicator:
                     status_indicator.setStyleSheet(self.get_machine_style(machine.state))
@@ -91,43 +90,69 @@ class MainWindow(QMainWindow):
     def create_machine_button(self, machine):
         # 创建一个容器widget来包含状态指示器和倒计时标签
         container = QWidget()
-        container.setFixedSize(120, 150)  # 设置固定大小
+        container.setFixedSize(200, 240)
         layout = QVBoxLayout(container)
-        layout.setSpacing(10)
-        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(20)
+        layout.setContentsMargins(20, 20, 20, 20)
         
         # 创建状态指示器
         status_indicator = QLabel()
-        status_indicator.setObjectName("status_indicator")  # 设置对象名以便查找
-        status_indicator.setFixedSize(40, 40)  # 圆点大小
+        status_indicator.setObjectName("status_indicator")
+        status_indicator.setFixedSize(60, 60)
         status_indicator.setStyleSheet(self.get_machine_style(machine.state))
         layout.addWidget(status_indicator, alignment=Qt.AlignCenter)
         
-        # 添加倒计时标签
-        time_label = QLabel(self.format_time(machine.time))
-        time_label.setAlignment(Qt.AlignCenter)
-        time_label.setStyleSheet("""
-            QLabel {
-                font-size: 14px;
-                color: #333333;
-            }
-        """)
-        layout.addWidget(time_label)
-        
-        # 存储对label的引用，以便更新
-        container.time_label = time_label
-        
-        # 点击事件
-        container.mousePressEvent = lambda event: self.open_machine_window(machine)
-        
-        # 设置容器的样式
-        container.setStyleSheet("""
-            QWidget {
-                background-color: white;
-                border: 1px solid #cccccc;
-                border-radius: 10px;
-            }
-        """)
+        # 根据状态添加不同的行为和显示
+        if machine.state == MachineState.BROKEN:
+            # 故障状态 - 不添加点击事件
+            container.setCursor(Qt.ForbiddenCursor)
+            container.setStyleSheet("""
+                QWidget {
+                    background-color: #f5f5f5;
+                    border: 1px solid #cccccc;
+                    border-radius: 15px;
+                    opacity: 0.7;
+                }
+            """)
+            
+            # 只显示故障提示标签
+            status_text = QLabel("故障维修中")
+            status_text.setAlignment(Qt.AlignCenter)
+            status_text.setStyleSheet("""
+                QLabel {
+                    color: #666666;
+                    font-size: 18px;
+                }
+            """)
+            layout.addWidget(status_text)
+        else:
+            # 其他状态显示倒计时
+            time_label = QLabel(self.format_time(machine.time))
+            time_label.setAlignment(Qt.AlignCenter)
+            time_label.setStyleSheet("""
+                QLabel {
+                    font-size: 24px;
+                    color: #333333;
+                }
+            """)
+            layout.addWidget(time_label)
+            
+            # 存储对label的引用，以便更新
+            container.time_label = time_label
+            
+            # 添加点击事件
+            container.setCursor(Qt.PointingHandCursor)
+            container.mousePressEvent = lambda event: self.open_machine_window(machine)
+            container.setStyleSheet("""
+                QWidget {
+                    background-color: white;
+                    border: 1px solid #cccccc;
+                    border-radius: 15px;
+                }
+                QWidget:hover {
+                    border: 2px solid #74b9ff;
+                }
+            """)
         
         return container
     
@@ -141,12 +166,12 @@ class MainWindow(QMainWindow):
         return f"""
             QLabel {{
                 background-color: {colors[state]};
-                border-radius: 20px;  /* 圆角设为宽度的一半 */
+                border-radius: 30px;  /* 圆角设为宽度的一半 */
                 border: 2px solid #cccccc;
-                min-width: 40px;
-                min-height: 40px;
-                max-width: 40px;
-                max-height: 40px;
+                min-width: 60px;
+                min-height: 60px;
+                max-width: 60px;
+                max-height: 60px;
             }}
         """
     
@@ -159,6 +184,8 @@ class MainWindow(QMainWindow):
         from .machine_window import MachineWindow
         dialog = MachineWindow(machine, self.user)
         dialog.exec_()
+        # 对话框关闭后刷新显示
+        self.update_machine_grid(self.room_combo.currentIndex())
         
     def on_room_changed(self, index):
         self.update_machine_grid(index)
@@ -175,3 +202,10 @@ class MainWindow(QMainWindow):
         for i, machine in enumerate(room.machines):
             btn = self.create_machine_button(machine)
             self.machine_grid.addWidget(btn, i//4, i%4)
+    
+    def start_using_machine(self, machine):
+        # 开始使用洗衣机
+        machine.time = 120
+        machine.state = MachineState.OCCUPIED
+        # 刷新显示
+        self.update_machine_grid(self.room_combo.currentIndex())

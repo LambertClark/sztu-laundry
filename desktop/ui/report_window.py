@@ -42,8 +42,9 @@ class ReportWindow(QDialog):
         # 更新洗衣机状态
         if report_type == "违规使用":
             self.machine.state = MachineState.REPORTED
-        else:
+        else:  # 设备故障
             self.machine.state = MachineState.BROKEN
+            self.machine.time = 0  # 清空剩余时间
             
         # 清空等待队列
         while not self.machine.wait_queue.empty():
@@ -52,3 +53,10 @@ class ReportWindow(QDialog):
         QMessageBox.information(self, "成功", 
             f"举报已提交\n类型：{report_type}\n说明：{detail}")
         self.accept()
+        
+    def report(self):
+        # 处理举报
+        self.machine.state = MachineState.BROKEN  # 将状态改为故障
+        self.machine.time = 0  # 清除剩余时间
+        QMessageBox.information(self, "举报成功", "举报成功，该洗衣机已被标记为故障状态")
+        self.close()
