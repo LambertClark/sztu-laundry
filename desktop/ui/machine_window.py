@@ -201,8 +201,14 @@ class MachineWindow(QDialog):
         dialog = ReportWindow(self.machine)
         dialog.exec_()
         
-        # 如果洗衣机状态改变，更新显示
-        self.update_time()
+        # 如果洗衣机状态改变，关闭当前窗口并重新打开
+        if self.machine.state == MachineState.BROKEN:
+            self.close()
+        else:
+            # 更新显示
+            self.update_time()
+            # 重新初始化界面
+            self.init_ui()
         
     def start_using(self):
         self.machine.time = 120
