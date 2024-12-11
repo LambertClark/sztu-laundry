@@ -171,6 +171,11 @@ class MachineWindow(QDialog):
         QMessageBox.information(self, "预约成功", 
             "预约成功！\n请在30秒内到达洗衣机前开始使用，\n否则预约将自动取消。")
             
+        # 关闭当前窗口并重新打开，以刷新界面
+        self.close()
+        dialog = MachineWindow(self.machine, self.user)
+        dialog.exec_()
+        
     def cancel_reserve(self):
         # 从等待队列中移除
         new_queue = Queue()
