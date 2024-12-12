@@ -8,6 +8,7 @@ from queue import Queue
 class MachineWindow(QDialog):
     def __init__(self, machine, user):
         super().__init__()
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
         self.machine = machine
         self.user = user
         self.setWindowTitle('洗衣机详情')

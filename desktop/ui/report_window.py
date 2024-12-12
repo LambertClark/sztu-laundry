@@ -1,17 +1,19 @@
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QComboBox, QTextEdit, 
                             QPushButton, QMessageBox)
+from PyQt5.QtCore import Qt
 from models.machine import MachineState
 
 class ReportWindow(QDialog):
     def __init__(self, machine):
         super().__init__()
+        # 移除帮助按钮
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
         self.machine = machine
+        self.setWindowTitle('举报')
+        self.setFixedSize(400, 300)
         self.init_ui()
         
     def init_ui(self):
-        self.setWindowTitle('举报')
-        self.setFixedSize(400, 300)
-        
         layout = QVBoxLayout()
         
         # 举报类型选择
